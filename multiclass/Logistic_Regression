@@ -1,0 +1,97 @@
+# code for logistic Regression
+
+import pandas as pd
+import numpy as np
+import re
+from sklearn.model_selection import KFold, GridSearchCV, train_test_split
+from sklearn.metrics import classification_report, f1_score, accuracy_score
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+
+def load_data(file_path, delimiter, label_col, text_col):
+    df = pd.read_csv(file_path, delimiter=delimiter, header=0)
+    df = df.dropna(subset=[text_col])
+    df[text_col] = df[text_col].astype(str).apply(lambda x: re.sub(r'[^\w\s]', '', x))
+    return df
+
+def prepare_labels(df, label_col):
+    labels = sorted(list(set(df[label_col].astype(str))))
+    label_to_id = {label: idx for idx, label in enumerate(labels)}
+    id_to_label = {v: k for k, v in label_to_id.items()}
+    df[label_col] = df[label_col].astype(str).apply(lambda x: label_to_id[x])
+    return label_to_id, id_to_label, len(labels)
+
+def train_and_evaluate_model(df, label_col, n_splits=5):
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
+    accuracy_scores = []
+    f1_micro_scores = []
+    f1_macro_scores = []
+    f1_weighted_scores = []
+
+    for fold, (train_index, test_index) in enumerate(kf.split(df), start=1):
+        train_df = df.iloc[train_index].reset_index(drop=True)
+        test_df = df.iloc[test_index].reset_index(drop=True)
+        train_df, val_df = train_test_split(train_df, test_size=0.2, random_state=42)
+
+        X_train, y_train = train_df["text"], train_df[label_col]
+        X_val, y_val = val_df["text"], val_df[label_col]
+        X_test, y_test = test_df["text"], test_df[label_col]
+
+        pipeline = Pipeline([
+            ("count", CountVectorizer()),
+            ("clf", LogisticRegression(multi_class="auto", max_iter=1000))
+        ])
+
+        
+        param_grid = [
+            {
+                "clf__solver": ["lbfgs"],
+                "clf__penalty": ["l2"],
+                "clf__C": [0.001, 0.01, 0.1, 1, 10]
+            },
+            {
+                "clf__solver": ["liblinear"],
+                "clf__penalty": ["l1", "l2"],
+                "clf__C": [0.001, 0.01, 0.1, 1, 10]
+            }
+        ]
+
+        grid_search = GridSearchCV(
+            pipeline,
+            param_grid=param_grid,
+            cv=3,
+            scoring="accuracy",
+            n_jobs=-1,
+            verbose=0
+        )
+
+        grid_search.fit(X_train, y_train)
+        best_model = grid_search.best_estimator_
+
+        preds = best_model.predict(X_test)
+        fold_accuracy = accuracy_score(y_test, preds)
+        accuracy_scores.append(fold_accuracy)
+
+        print("Classification Report for fold", fold, ":")
+        print(classification_report(y_test, preds))
+
+        f1_micro_scores.append(f1_score(y_test, preds, average="micro"))
+        f1_macro_scores.append(f1_score(y_test, preds, average="macro"))
+        f1_weighted_scores.append(f1_score(y_test, preds, average="weighted"))
+
+    print("Mean Accuracy:", np.mean(accuracy_scores))
+    print("Mean F1-micro:", np.mean(f1_micro_scores))
+    print("Mean F1-macro:", np.mean(f1_macro_scores))
+    print("Mean F1-weighted:", np.mean(f1_weighted_scores))
+
+if __name__ == "__main__":
+    data_file = "frequency_classes_texts.csv"
+    delimiter = "@"
+    text_col = "text"
+    label_col = "label_mr"
+
+    df = load_data(data_file, delimiter, label_col, text_col)
+    label_to_id, id_to_label, num_labels = prepare_labels(df, label_col)
+
+    train_and_evaluate_model(df, label_col)
