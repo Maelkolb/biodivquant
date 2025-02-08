@@ -27,7 +27,7 @@ for entry in entries:
         print(f"Error processing {custom_id}: {e}")
         annotations.append({"custom_id": custom_id, "error": str(e)})
 
-with open("Annotated_Tuples_GPT4_4_8_new_prompt.json", "w", encoding="utf-8") as output_file:
+with open("Annotated_Tuples_GPT4_4_8.json", "w", encoding="utf-8") as output_file:
     json.dump(annotations, output_file, ensure_ascii=False, indent=2)
 
 print("Annotations saved to: Annotated_Tuples_GPT4_4_8_new_prompt.json")
